@@ -1,6 +1,19 @@
 version: '3.7'
 
 services:
+
+  app:
+    build: .
+    container_name: ingestor-service
+    depends_on:
+      - kafka
+      - zookeeper
+      - schema-registry
+    ports:
+      - "8080:8080"
+    networks:
+      - kafka-net
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
