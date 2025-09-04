@@ -20,22 +20,30 @@ public class TelemetryProducerService implements ITelemetryProducerService {
     }
 
     @Override
-    public void sendTelemetryEvent(DroneTelemetryDataDto droneData) throws Exception {
-        try {
-            log.info("Publishing data for drone id: {}", droneData.droneId());
-            DroneTelemetryEvent event = DroneTelemetryEvent.newBuilder()
-                    .setDroneId(droneData.droneId().toString())
-                    .setTimestamp(droneData.timestamp())
-                    .setLatitude(droneData.latitude())
-                    .setLongitude(droneData.longitude())
-                    .setVelocity(droneData.velocity())
-                    .setBatteryLevel(droneData.batteryLevel())
-                    .setEngineTemperature(droneData.engineTemperature())
-                    .build();
-            kafkaTemplate.send(KAFKA_DRONE_DATA_TOPIC, event);
-        } catch (Exception e) {
-            log.error("Error to publish telemetry for drone {} due to: {}", droneData.droneId(), e.getMessage(), e);
-            throw e;
-        }
+    public void sendTelemetryEvent(DroneTelemetryDataDto droneData) {
+        log.info("Publishing data for drone id: {}", droneData.droneId());
+        DroneTelemetryEvent event = buildDroneTelemetryEvent(droneData);
+        String key = droneData.droneId().toString();
+        var future = kafkaTemplate.send(KAFKA_DRONE_DATA_TOPIC, key, event);
+        future.whenComplete((result, ex) -> {
+           if (ex != null) {
+               log.error("Failed to send message for drone {} due to: {}", key, ex.getMessage(), ex);
+           } else {
+               log.info("Message for drone {} sent successfully to partition {} with offset {}", key,
+                       result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
+           }
+        });
+    }
+
+    private DroneTelemetryEvent buildDroneTelemetryEvent(DroneTelemetryDataDto droneData) {
+        return DroneTelemetryEvent.newBuilder()
+                .setDroneId(droneData.droneId().toString())
+                .setTimestamp(droneData.timestamp())
+                .setLatitude(droneData.latitude())
+                .setLongitude(droneData.longitude())
+                .setVelocity(droneData.velocity())
+                .setBatteryLevel(droneData.batteryLevel())
+                .setEngineTemperature(droneData.engineTemperature())
+                .build();
     }
 }
