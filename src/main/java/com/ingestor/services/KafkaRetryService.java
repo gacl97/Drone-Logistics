@@ -2,6 +2,7 @@ package com.ingestor.services;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.core.IntervalFunction;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
@@ -20,16 +21,15 @@ public class KafkaRetryService {
     private final Retry retry;
     private final CircuitBreaker circuitBreaker;
 
-    public KafkaRetryService(RetryRegistry retryRegistry) {
+    public KafkaRetryService(RetryRegistry retryRegistry, CircuitBreakerRegistry circuitBreakerRegistry) {
         RetryConfig config = RetryConfig.custom()
                 .maxAttempts(3)
-                .waitDuration(Duration.ofSeconds(2))
                 // Exponential backoff
                 .intervalFunction(IntervalFunction.ofExponentialBackoff(Duration.ofSeconds(1), 2))
                 .retryExceptions(KafkaException.class)
                 .build();
 
-        this.retry = Retry.of("kafkaRetry", config);
+        this.retry = retryRegistry.retry("kafkaRetry", config);
         this.retry.getEventPublisher()
                 .onRetry(event -> log.info("Retry #{}", event.getNumberOfRetryAttempts()))
                 .onError(event -> log.info("Error retry: {}", event.getLastThrowable().getMessage()));
@@ -40,9 +40,9 @@ public class KafkaRetryService {
                 .waitDurationInOpenState(Duration.ofSeconds(10))
                 .build();
 
-        this.circuitBreaker = CircuitBreaker.of("kafkaCircuitBreaker", cbConfig);
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("kafkaCircuitBreaker", cbConfig);
 
-        circuitBreaker.getEventPublisher()
+        this.circuitBreaker.getEventPublisher()
                 .onStateTransition(event -> log.info("CircuitBreaker state changed: " + event.getStateTransition()));
     }
 
